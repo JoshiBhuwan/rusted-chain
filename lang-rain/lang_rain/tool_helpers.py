@@ -20,6 +20,7 @@ class ToolAdapter:
         self.__name__ = tool.name
         
         # Extract schema using LangChain's built-in methods
+        # The fun stuff is here
         try:
             parameters = tool.get_input_schema().model_json_schema()
         except AttributeError:
