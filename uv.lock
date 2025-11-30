@@ -3,6 +3,6 @@ revision = 3
 requires-python = ">=3.7"
 
 [[package]]
-name = "lang-rain"
+name = "rusted-chain"
 version = "0.1.0"
 source = { editable = "." }

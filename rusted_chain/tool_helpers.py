@@ -1,17 +1,16 @@
 """
-Tool helpers for lang_rain.
+Tool helpers for rusted_chain.
 Leverages LangChain for tool definition and execution.
 """
 
 from langchain_core.tools import tool as lc_tool
-from langchain_core.tools import BaseTool
 
 # Re-export the LangChain tool decorator
 tool = lc_tool
 
 class ToolAdapter:
     """
-    Adapts a LangChain tool to lang_rain's interface.
+    Adapts a LangChain tool to rusted_chain's interface.
     Converts LangChain/Pydantic schemas to a clean JSON format suitable for LLMs.
     """
     
@@ -51,14 +50,6 @@ class ToolAdapter:
 
 
 def ensure_tool_wrapper(obj):
-    """
-    Ensures the object is wrapped in a ToolAdapter.
-    
-    Accepts:
-    1. Raw Python functions (converts to LangChain tool -> Adapter)
-    2. LangChain tools (wraps in Adapter)
-    3. Existing ToolAdapters (returns as is)
-    """
     if isinstance(obj, ToolAdapter):
         return obj
     

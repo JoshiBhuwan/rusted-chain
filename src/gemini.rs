@@ -72,8 +72,6 @@ pub struct Gemini {
     model: String,
     client: Client,
     tools: Option<Vec<serde_json::Value>>,
-    middleware: Option<Vec<serde_json::Value>>,
-    context: Option<serde_json::Value>,
 }
 
 impl Default for Gemini {
@@ -84,8 +82,6 @@ impl Default for Gemini {
             model: "gemini-2.5-flash".to_string(),
             client: Client::new(),
             tools: None,
-            middleware: None,
-            context: None,
         }
     }
 }
@@ -118,16 +114,6 @@ impl Gemini {
 
     pub fn with_tools(mut self, tools: Vec<serde_json::Value>) -> Self {
         self.tools = Some(tools);
-        self
-    }
-
-    pub fn with_middleware(mut self, middleware: Vec<serde_json::Value>) -> Self {
-        self.middleware = Some(middleware);
-        self
-    }
-
-    pub fn with_context(mut self, context: serde_json::Value) -> Self {
-        self.context = Some(context);
         self
     }
 
@@ -185,14 +171,12 @@ impl Gemini {
                 if let Some(candidate) = candidates.first() {
                     let parts = &candidate.content.parts;
 
-                    // Check if response contains text
                     for part in parts {
                         if let Part::Text { text } = part {
                             return Ok(text.clone());
                         }
                     }
 
-                    // If no text, it must be a function call (but we can't execute it here)
                     return Err("Function calling not yet supported in invoke()".to_string());
                 }
             }
@@ -245,7 +229,6 @@ impl Gemini {
     ) -> Result<String, String> {
         let mut contents = conversation_history;
 
-        // Add the tool result
         contents.push(Content {
             parts: vec![Part::FunctionResponse {
                 function_response: FunctionResponseData {

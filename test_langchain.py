@@ -2,7 +2,7 @@
 Test LangChain tool integration.
 """
 from langchain_core.tools import tool
-from lang_rain import GeminiModel
+from rusted_chain import GeminiModel
 
 # Define a LangChain tool
 @tool
@@ -10,7 +10,7 @@ def multiply(a: int, b: int) -> int:
     """Multiplies a and b."""
     return a * b
 
-print("=== Test LangChain Tool Integration ===")
+print("LangChain Tool Integration")
 print(f"Tool Name: {multiply.name}")
 print(f"Tool Description: {multiply.description}")
 

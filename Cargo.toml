@@ -1,10 +1,10 @@
 [package]
-name = "lang_rain"
+name = "rusted_chain"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "lang_rain"
+name = "rusted_chain"
 crate-type = ["cdylib"]
 
 [dependencies]

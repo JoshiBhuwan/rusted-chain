@@ -1,6 +1,6 @@
-# lang-rain
+# Rusted Chain
 
-lang-rain is a Rust-powered LLM agent framework for Python. It combines the performance of Rust with the usability of Python, providing a LangChain-compatible API for building AI agents.
+Rusted Chain is a Rust-powered LLM agent framework for Python. It combines the performance of Rust with the usability of Python, providing a LangChain-compatible API for building AI agents.
 
 ## Features
 
@@ -13,17 +13,15 @@ lang-rain is a Rust-powered LLM agent framework for Python. It combines the perf
 ## Installation
 
 ```bash
-pip install lang-rain
+pip install rusted-chain
 ```
-
-*Note: A Rust toolchain may be required if a pre-built wheel is not available.*
 
 ## Quick Start
 
 ### Basic Usage
 
 ```python
-from lang_rain import GeminiModel, OpenAIModel, ClaudeModel
+from rusted_chain import GeminiModel, OpenAIModel, ClaudeModel
 
 # Initialize an agent
 agent = GeminiModel(api_key="your-api-key")
@@ -35,10 +33,10 @@ print(response.text)
 
 ### Using Tools
 
-You can pass Python functions directly. `lang-rain` handles schema generation and execution.
+You can pass Python functions directly. `rusted-chain` handles schema generation and execution.
 
 ```python
-from lang_rain import GeminiModel
+from rusted_chain import GeminiModel
 
 def get_weather(city: str) -> str:
     """Get the current weather for a city."""
@@ -59,7 +57,7 @@ You can also use existing LangChain tools or the `@tool` decorator.
 
 ```python
 from langchain_core.tools import tool
-from lang_rain import OpenAIModel
+from rusted_chain import OpenAIModel
 
 @tool
 def multiply(a: int, b: int) -> int:

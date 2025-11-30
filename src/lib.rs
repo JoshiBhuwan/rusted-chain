@@ -7,14 +7,13 @@ use claude::{Claude, ContentBlock as ClaudeContentBlock, Message as ClaudeMessag
 use serde_json::json;
 use dotenv;
 #[allow(unused_imports)]
-use error::LangRainError;
+use error::RustedChainError;
 use gemini::{Gemini, GeminiResponse, Content as GeminiContent, Part as GeminiPart, FunctionResponseData};
 use once_cell::sync::Lazy;
 use openai::{OpenAI, Message as OpenAIMessage};
 use pyo3::prelude::*;
 use tokio::runtime::Runtime;
 
-/// Maximum number of tool execution iterations before giving up
 const MAX_TOOL_ITERATIONS: usize = 10;
 
 static RUNTIME: Lazy<Runtime> =
@@ -87,35 +86,17 @@ fn convert_tools(py: Python, tools: &Option<Vec<Py<PyAny>>>) -> Vec<serde_json::
             t.iter()
                 .map(|tool| {
                     let tool_bound = tool.bind(py);
-                    // Check if it's a ToolWrapper with to_dict() method
+                    // Prefer the wrapper-provided schema if it exists.
                     if let Ok(schema) = tool_bound.call_method0("to_dict") {
                         pythonize::depythonize(&schema).unwrap_or(serde_json::Value::Null)
                     } else {
-                        // Fallback to treating it as a dict
+                        // Otherwise treat whatever we received as plain dict data.
                         pythonize::depythonize(tool_bound).unwrap_or(serde_json::Value::Null)
                     }
                 })
                 .collect()
         })
         .unwrap_or_default()
-}
-
-fn convert_middleware(py: Python, middleware: &Option<Vec<Py<PyAny>>>) -> Vec<serde_json::Value> {
-    middleware
-        .as_ref()
-        .map(|m| {
-            m.iter()
-                .map(|mw| pythonize::depythonize(mw.bind(py)).unwrap_or(serde_json::Value::Null))
-                .collect()
-        })
-        .unwrap_or_default()
-}
-
-fn convert_context(py: Python, context_schema: &Option<Py<PyAny>>) -> serde_json::Value {
-    context_schema
-        .as_ref()
-        .map(|c| pythonize::depythonize(c.bind(py)).unwrap_or(serde_json::Value::Null))
-        .unwrap_or(serde_json::Value::Null)
 }
 
 fn wrap_tool_result(value: serde_json::Value) -> serde_json::Value {
@@ -126,13 +107,11 @@ fn wrap_tool_result(value: serde_json::Value) -> serde_json::Value {
 }
 
 #[pyfunction]
-#[pyo3(signature = (model, tools=None, middleware=None, context_schema=None, api_key=None))]
+#[pyo3(signature = (model, tools=None, api_key=None))]
 fn create_agent(
     py: Python,
     model: String,
     tools: Option<Vec<Py<PyAny>>>,
-    middleware: Option<Vec<Py<PyAny>>>,
-    context_schema: Option<Py<PyAny>>,
     api_key: Option<String>,
 ) -> PyResult<Py<PyAny>> {
     dotenv::dotenv().ok();
@@ -144,8 +123,6 @@ fn create_agent(
             let agent = OpenAIModel {
                 model: Some(model),
                 tools,
-                middleware,
-                context_schema,
                 api_key,
             };
             Ok(Py::new(py, agent)?.into())
@@ -154,8 +131,6 @@ fn create_agent(
             let agent = ClaudeModel {
                 model: Some(model),
                 tools,
-                middleware,
-                context_schema,
                 api_key,
             };
             Ok(Py::new(py, agent)?.into())
@@ -164,8 +139,6 @@ fn create_agent(
             let agent = GeminiModel {
                 model: Some(model),
                 tools,
-                middleware,
-                context_schema,
                 api_key,
             };
             Ok(Py::new(py, agent)?.into())
@@ -241,8 +214,6 @@ impl AgentResponse {
 pub struct GeminiModel {
     model: Option<String>,
     tools: Option<Vec<Py<PyAny>>>,
-    middleware: Option<Vec<Py<PyAny>>>,
-    context_schema: Option<Py<PyAny>>,
     api_key: Option<String>,
 }
 
@@ -260,14 +231,6 @@ impl GeminiModel {
         if !tools_json.is_empty() {
             client = client.with_tools(tools_json);
         }
-        let middleware = convert_middleware(py, &self.middleware);
-        if !middleware.is_empty() {
-            client = client.with_middleware(middleware);
-        }
-        let context = convert_context(py, &self.context_schema);
-        if !context.is_null() {
-            client = client.with_context(context);
-        }
         client
     }
 }
@@ -275,19 +238,15 @@ impl GeminiModel {
 #[pymethods]
 impl GeminiModel {
     #[new]
-    #[pyo3(signature = (model=None, tools=None, middleware=None, context_schema=None, api_key=None))]
+    #[pyo3(signature = (model=None, tools=None, api_key=None))]
     fn new(
         model: Option<String>,
         tools: Option<Vec<Py<PyAny>>>,
-        middleware: Option<Vec<Py<PyAny>>>,
-        context_schema: Option<Py<PyAny>>,
         api_key: Option<String>,
     ) -> Self {
         GeminiModel {
             model,
             tools,
-            middleware,
-            context_schema,
             api_key,
         }
     }
@@ -411,8 +370,6 @@ impl GeminiModel {
 pub struct OpenAIModel {
     model: Option<String>,
     tools: Option<Vec<Py<PyAny>>>,
-    middleware: Option<Vec<Py<PyAny>>>,
-    context_schema: Option<Py<PyAny>>,
     api_key: Option<String>,
 }
 
@@ -430,14 +387,6 @@ impl OpenAIModel {
         if !tools_json.is_empty() {
             client = client.with_tools(tools_json);
         }
-        let middleware = convert_middleware(py, &self.middleware);
-        if !middleware.is_empty() {
-            client = client.with_middleware(middleware);
-        }
-        let context = convert_context(py, &self.context_schema);
-        if !context.is_null() {
-            client = client.with_context(context);
-        }
         client
     }
 }
@@ -445,19 +394,15 @@ impl OpenAIModel {
 #[pymethods]
 impl OpenAIModel {
     #[new]
-    #[pyo3(signature = (model=None, tools=None, middleware=None, context_schema=None, api_key=None))]
+    #[pyo3(signature = (model=None, tools=None, api_key=None))]
     fn new(
         model: Option<String>,
         tools: Option<Vec<Py<PyAny>>>,
-        middleware: Option<Vec<Py<PyAny>>>,
-        context_schema: Option<Py<PyAny>>,
         api_key: Option<String>,
     ) -> Self {
         OpenAIModel {
             model,
             tools,
-            middleware,
-            context_schema,
             api_key,
         }
     }
@@ -581,8 +526,6 @@ impl OpenAIModel {
 pub struct ClaudeModel {
     model: Option<String>,
     tools: Option<Vec<Py<PyAny>>>,
-    middleware: Option<Vec<Py<PyAny>>>,
-    context_schema: Option<Py<PyAny>>,
     api_key: Option<String>,
 }
 
@@ -600,14 +543,6 @@ impl ClaudeModel {
         if !tools_json.is_empty() {
             client = client.with_tools(tools_json);
         }
-        let middleware = convert_middleware(py, &self.middleware);
-        if !middleware.is_empty() {
-            client = client.with_middleware(middleware);
-        }
-        let context = convert_context(py, &self.context_schema);
-        if !context.is_null() {
-            client = client.with_context(context);
-        }
         client
     }
 }
@@ -615,19 +550,15 @@ impl ClaudeModel {
 #[pymethods]
 impl ClaudeModel {
     #[new]
-    #[pyo3(signature = (model=None, tools=None, middleware=None, context_schema=None, api_key=None))]
+    #[pyo3(signature = (model=None, tools=None, api_key=None))]
     fn new(
         model: Option<String>,
         tools: Option<Vec<Py<PyAny>>>,
-        middleware: Option<Vec<Py<PyAny>>>,
-        context_schema: Option<Py<PyAny>>,
         api_key: Option<String>,
     ) -> Self {
         ClaudeModel {
             model,
             tools,
-            middleware,
-            context_schema,
             api_key,
         }
     }
@@ -746,7 +677,7 @@ impl ClaudeModel {
 }
 
 #[pymodule]
-fn lang_rain(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn rusted_chain(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(create_agent, m)?)?;
     m.add_class::<GeminiModel>()?;
     m.add_class::<OpenAIModel>()?;

@@ -79,8 +79,6 @@ pub struct OpenAI {
     model: String,
     client: Client,
     tools: Option<Vec<serde_json::Value>>,
-    middleware: Option<Vec<serde_json::Value>>,
-    context: Option<serde_json::Value>,
 }
 
 impl Default for OpenAI {
@@ -91,8 +89,6 @@ impl Default for OpenAI {
             model: "gpt-4o-mini".to_string(),
             client: Client::new(),
             tools: None,
-            middleware: None,
-            context: None,
         }
     }
 }
@@ -114,16 +110,6 @@ impl OpenAI {
 
     pub fn with_tools(mut self, tools: Vec<serde_json::Value>) -> Self {
         self.tools = Some(tools);
-        self
-    }
-
-    pub fn with_middleware(mut self, middleware: Vec<serde_json::Value>) -> Self {
-        self.middleware = Some(middleware);
-        self
-    }
-
-    pub fn with_context(mut self, context: serde_json::Value) -> Self {
-        self.context = Some(context);
         self
     }
 

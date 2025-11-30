@@ -1,5 +1,5 @@
 """
-LangChain-style tool helper for lang_rain.
+LangChain-style tool helper for rusted_chain.
 
 This allows you to create tools that combine both the schema AND the callable function,
 so invoke() can automatically execute them.
@@ -45,7 +45,7 @@ def tool(name: str, description: str, parameters: dict):
 
 # Example usage:
 if __name__ == "__main__":
-    from lang_rain import ChatGemini
+    from rusted_chain import ChatGemini
     
     # Create a tool using the decorator
     @tool(
