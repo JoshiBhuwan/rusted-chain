@@ -94,6 +94,28 @@ else:
     print(response.text)
 ```
 
+## Performance benchmark (test_perf.py)
+
+A small benchmarking script is included at `test_perf.py` to compare the request/response latency of `rusted_chain` vs a LangChain-based client when calling the Google Gemini model (the repository author used `gemini-2.5-flash` for tests).
+
+```bash
+pip install langchain-google-genai python-dotenv
+```
+
+How to run
+
+* Optional environment variables used by the script:
+    * `RC_BENCH_WARMUP` — set to `true`/`false` (default: `true`) to perform warm-up calls before measurements.
+    * `RC_BENCH_REPEATS` — number of timed repetitions (default: `4`).
+
+Example usage (from repo root)
+
+```bash
+# set API key and run the benchmark
+export GOOGLE_API_KEY="your-google-api-key"
+python test_perf.py
+```
+
 ## License
 
 MIT

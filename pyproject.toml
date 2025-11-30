@@ -4,10 +4,22 @@ build-backend = "maturin"
 
 [project]
 name = "rusted_chain"
-version = "0.1.0"
+version = "1.0.0"
 requires-python = ">=3.7"
+description = "LangChain like python library written in rust"
+readme = "README.md"
+authors = [{ name = "Bhuwan Joshi", email = "kanhajsh@gmail.com" }]
 classifiers = [
     "Programming Language :: Rust",
     "Programming Language :: Python :: Implementation :: CPython",
     "Programming Language :: Python :: Implementation :: PyPy",
 ]
+dependencies = [
+    "langchain-core>=1.1.0"
+]
+keywords = ["langchain", "rust", "agents", "bindings"]
+
+[project.urls]
+Homepage = "https://github.com/JoshiBhuwan/rusted-chain"
+Source = "https://github.com/JoshiBhuwan/rusted-chain"
+Issues = "https://github.com/JoshiBhuwan/rusted-chain/issues"
