@@ -9,7 +9,9 @@ jobs:
   build-and-publish:
     name: Build and publish package
     runs-on: ubuntu-latest
-    if: ${{ secrets.PYPI_API_TOKEN != '' }}
+    env:
+      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+    if: ${{ env.PYPI_API_TOKEN != '' }}
     permissions:
       contents: read
 
@@ -34,7 +36,7 @@ jobs:
       - name: Publish to PyPI
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+          TWINE_PASSWORD: ${{ env.PYPI_API_TOKEN }}
         run: |
           twine upload dist/*
 
