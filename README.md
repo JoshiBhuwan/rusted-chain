@@ -74,7 +74,7 @@ print(result)
 
 | Class | Provider | Env Variable |
 |-------|----------|--------------|
-| `GeminiModel` | Google Gemini | `GEMINI_API_KEY` |
+| `GeminiModel` | Google Gemini | `GOOGLE_API_KEY` |
 | `OpenAIModel` | OpenAI (GPT-4, etc.) | `OPENAI_API_KEY` |
 | `ClaudeModel` | Anthropic Claude | `ANTHROPIC_API_KEY` |
 
