@@ -1,5 +1,8 @@
 name: Publish to PyPI
 
+env:
+  PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
 on:
   push:
     branches:
@@ -9,8 +12,6 @@ jobs:
   build-and-publish:
     name: Build and publish package
     runs-on: ubuntu-latest
-    env:
-      PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
     if: ${{ env.PYPI_API_TOKEN != '' }}
     permissions:
       contents: read
