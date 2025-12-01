@@ -3,6 +3,9 @@ Test LangChain tool integration.
 """
 from langchain_core.tools import tool
 from rusted_chain import GeminiModel
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Define a LangChain tool
 @tool
@@ -24,7 +27,11 @@ response = agent.invoke("Multiply 5 by 3")
 print(f"Response: {response}")
 print(f"Is tool call: {response.is_tool_call}")
 
-# Test run() - auto-executes tools
-print("\nTesting run() - auto-execute tools...")
-result = agent.run("Multiply 5 by 3")
-print(f"Result: {result}")
+# Test invoke() with tools - auto-executes tools (was run())
+print("\nTesting invoke() with tools - auto-execute tools...")
+response = agent.invoke("Multiply 5 by 3")
+print(f"Response type: {type(response)}")
+if response.is_text:
+    print(f"Result: {response.text}")
+else:
+    print(f"Unexpected response type: {response}")

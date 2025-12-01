@@ -46,8 +46,8 @@ def get_weather(city: str) -> str:
 agent = GeminiModel(tools=[get_weather])
 
 # Run the agent
-result = agent.run("What's the weather like in Tokyo?")
-print(result)
+result = agent.invoke("What's the weather like in Tokyo?")
+print(result.text)
 # Output: "The weather in Tokyo is sunny and 25°C."
 ```
 
@@ -66,8 +66,8 @@ def multiply(a: int, b: int) -> int:
 
 agent = OpenAIModel(tools=[multiply])
 
-result = agent.run("What is 123 * 456?")
-print(result)
+result = agent.invoke("What is 123 * 456?")
+print(result.text)
 ```
 
 ## Supported Models
@@ -80,19 +80,12 @@ print(result)
 
 ## Advanced Usage
 
-### Manual Tool Control
+### Single-Shot vs Auto-Execution
 
-Use `invoke()` to get the raw response (text or tool call) without auto-execution.
+`invoke()` behaves differently depending on whether tools are configured:
 
-```python
-response = agent.invoke("Call my_tool")
-
-if response.is_tool_call:
-    print(f"Tool: {response.tool_call.name}")
-    print(f"Args: {response.tool_call.args}")
-else:
-    print(response.text)
-```
+*   **With Tools**: It automatically runs the agent loop, executing tools until a final answer is reached. Returns an `AgentResponse` containing the final text.
+*   **Without Tools**: It performs a single-shot completion. Returns an `AgentResponse` containing the text.
 
 ## Performance benchmark (test_perf.py)
 

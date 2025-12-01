@@ -4,14 +4,16 @@ mod gemini;
 mod openai;
 
 use claude::{Claude, ContentBlock as ClaudeContentBlock, Message as ClaudeMessage};
-use serde_json::json;
 use dotenv;
 #[allow(unused_imports)]
 use error::RustedChainError;
-use gemini::{Gemini, GeminiResponse, Content as GeminiContent, Part as GeminiPart, FunctionResponseData};
+use gemini::{
+    Content as GeminiContent, FunctionResponseData, Gemini, GeminiResponse, Part as GeminiPart,
+};
 use once_cell::sync::Lazy;
-use openai::{OpenAI, Message as OpenAIMessage};
+use openai::{Message as OpenAIMessage, OpenAI};
 use pyo3::prelude::*;
+use serde_json::json;
 use tokio::runtime::Runtime;
 
 const MAX_TOOL_ITERATIONS: usize = 10;
@@ -239,11 +241,7 @@ impl GeminiModel {
 impl GeminiModel {
     #[new]
     #[pyo3(signature = (model=None, tools=None, api_key=None))]
-    fn new(
-        model: Option<String>,
-        tools: Option<Vec<Py<PyAny>>>,
-        api_key: Option<String>,
-    ) -> Self {
+    fn new(model: Option<String>, tools: Option<Vec<Py<PyAny>>>, api_key: Option<String>) -> Self {
         GeminiModel {
             model,
             tools,
@@ -259,49 +257,44 @@ impl GeminiModel {
         }
     }
 
-    /// Invoke the model and return the response (text or tool call).
-    /// Like LangChain's invoke() - single shot, doesn't auto-execute tools.
+    /// Invoke the model.
+    /// If tools are provided, this will run the agent loop (execute tools) until a final answer is reached.
+    /// If no tools are provided, it runs a single-shot completion.
     fn invoke(&self, py: Python, query: String) -> PyResult<AgentResponse> {
-        let client = self.build_client(py);
+        // Check if we have tools. If not, do single-shot.
+        let has_tools = self.tools.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
 
-        let response = RUNTIME.block_on(async {
-            client
-                .invoke_with_response(&query)
-                .await
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
-        })?;
+        if !has_tools {
+            // Single-shot logic (original invoke)
+            let client = self.build_client(py);
+            let response = RUNTIME.block_on(async {
+                client
+                    .invoke_with_response(&query)
+                    .await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+            })?;
 
-        match response {
-            GeminiResponse::Text(text) => Ok(AgentResponse::Text { text }),
-            GeminiResponse::ToolCall(tool_call) => Ok(AgentResponse::ToolCall {
-                tool_call: ToolCall {
-                    name: tool_call.name,
-                    args: serde_json::to_string(&tool_call.args)
-                        .unwrap_or_else(|_| "{}".to_string()),
-                },
-            }),
+            return match response {
+                GeminiResponse::Text(text) => Ok(AgentResponse::Text { text }),
+                GeminiResponse::ToolCall(tool_call) => Ok(AgentResponse::ToolCall {
+                    tool_call: ToolCall {
+                        name: tool_call.name,
+                        args: serde_json::to_string(&tool_call.args)
+                            .unwrap_or_else(|_| "{}".to_string()),
+                    },
+                }),
+            };
         }
-    }
 
-    /// Run the model with automatic tool execution.
-    /// Like LangChain's AgentExecutor - loops until final text response.
-    fn run(&self, py: Python, query: String) -> PyResult<String> {
+        // Agent loop logic (original run)
         let tools_dict = pyo3::types::PyDict::new(py);
-        let mut has_tools = false;
         if let Some(tools) = &self.tools {
             for tool in tools {
                 let tool_obj = tool.bind(py);
                 if let Ok(name) = tool_obj.getattr("__name__") {
                     tools_dict.set_item(name, tool_obj)?;
-                    has_tools = true;
                 }
             }
-        }
-
-        if !has_tools {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "run() requires at least one callable tool. Use invoke() for tool-free calls.",
-            ));
         }
 
         let client = self.build_client(py);
@@ -324,17 +317,15 @@ impl GeminiModel {
 
             match response {
                 GeminiResponse::Text(text) => {
-                    return Ok(text);
+                    return Ok(AgentResponse::Text { text });
                 }
                 GeminiResponse::ToolCall(tool_call) => {
-                    let tool_fn = tools_dict
-                        .get_item(&tool_call.name)?
-                        .ok_or_else(|| {
+                    let tool_fn = tools_dict.get_item(&tool_call.name)?.ok_or_else(|| {
                         PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
                             "Tool '{}' not found",
                             tool_call.name
                         ))
-                        })?;
+                    })?;
 
                     let kwargs = pythonize::pythonize(py, &tool_call.args)?;
                     let result = if let Ok(dict) = kwargs.cast::<pyo3::types::PyDict>() {
@@ -395,11 +386,7 @@ impl OpenAIModel {
 impl OpenAIModel {
     #[new]
     #[pyo3(signature = (model=None, tools=None, api_key=None))]
-    fn new(
-        model: Option<String>,
-        tools: Option<Vec<Py<PyAny>>>,
-        api_key: Option<String>,
-    ) -> Self {
+    fn new(model: Option<String>, tools: Option<Vec<Py<PyAny>>>, api_key: Option<String>) -> Self {
         OpenAIModel {
             model,
             tools,
@@ -415,49 +402,42 @@ impl OpenAIModel {
         }
     }
 
-    /// Invoke the model and return the response (text or tool call).
-    /// Like LangChain's invoke() - single shot, doesn't auto-execute tools.
+    /// Invoke the model.
+    /// If tools are provided, this will run the agent loop (execute tools) until a final answer is reached.
+    /// If no tools are provided, it runs a single-shot completion.
     fn invoke(&self, py: Python, query: String) -> PyResult<AgentResponse> {
-        let client = self.build_client(py);
+        let has_tools = self.tools.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
 
-        let response = RUNTIME.block_on(async {
-            client
-                .invoke_with_response(&query)
-                .await
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
-        })?;
+        if !has_tools {
+            let client = self.build_client(py);
+            let response = RUNTIME.block_on(async {
+                client
+                    .invoke_with_response(&query)
+                    .await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+            })?;
 
-        match response {
-            openai::OpenAIResponse::Text(text) => Ok(AgentResponse::Text { text }),
-            openai::OpenAIResponse::ToolCall(tool_call) => Ok(AgentResponse::ToolCall {
-                tool_call: ToolCall {
-                    name: tool_call.name,
-                    args: serde_json::to_string(&tool_call.args)
-                        .unwrap_or_else(|_| "{}".to_string()),
-                },
-            }),
+            return match response {
+                openai::OpenAIResponse::Text(text) => Ok(AgentResponse::Text { text }),
+                openai::OpenAIResponse::ToolCall(tool_call) => Ok(AgentResponse::ToolCall {
+                    tool_call: ToolCall {
+                        name: tool_call.name,
+                        args: serde_json::to_string(&tool_call.args)
+                            .unwrap_or_else(|_| "{}".to_string()),
+                    },
+                }),
+            };
         }
-    }
 
-    /// Run the model with automatic tool execution.
-    /// Like LangChain's AgentExecutor - loops until final text response.
-    fn run(&self, py: Python, query: String) -> PyResult<String> {
+        // Agent loop logic
         let tools_dict = pyo3::types::PyDict::new(py);
-        let mut has_tools = false;
         if let Some(tools) = &self.tools {
             for tool in tools {
                 let tool_obj = tool.bind(py);
                 if let Ok(name) = tool_obj.getattr("__name__") {
                     tools_dict.set_item(name, tool_obj)?;
-                    has_tools = true;
                 }
             }
-        }
-
-        if !has_tools {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "run() requires at least one callable tool. Use invoke() for tool-free calls.",
-            ));
         }
 
         let client = self.build_client(py);
@@ -481,17 +461,15 @@ impl OpenAIModel {
 
             match response {
                 openai::OpenAIResponse::Text(text) => {
-                    return Ok(text);
+                    return Ok(AgentResponse::Text { text });
                 }
                 openai::OpenAIResponse::ToolCall(tool_call) => {
-                    let tool_fn = tools_dict
-                        .get_item(&tool_call.name)?
-                        .ok_or_else(|| {
-                            PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
-                                "Tool '{}' not found",
-                                tool_call.name
-                            ))
-                        })?;
+                    let tool_fn = tools_dict.get_item(&tool_call.name)?.ok_or_else(|| {
+                        PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
+                            "Tool '{}' not found",
+                            tool_call.name
+                        ))
+                    })?;
 
                     let kwargs = pythonize::pythonize(py, &tool_call.args)?;
                     let result = if let Ok(dict) = kwargs.cast::<pyo3::types::PyDict>() {
@@ -551,11 +529,7 @@ impl ClaudeModel {
 impl ClaudeModel {
     #[new]
     #[pyo3(signature = (model=None, tools=None, api_key=None))]
-    fn new(
-        model: Option<String>,
-        tools: Option<Vec<Py<PyAny>>>,
-        api_key: Option<String>,
-    ) -> Self {
+    fn new(model: Option<String>, tools: Option<Vec<Py<PyAny>>>, api_key: Option<String>) -> Self {
         ClaudeModel {
             model,
             tools,
@@ -571,49 +545,42 @@ impl ClaudeModel {
         }
     }
 
-    /// Invoke the model and return the response (text or tool call).
-    /// Like LangChain's invoke() - single shot, doesn't auto-execute tools.
+    /// Invoke the model.
+    /// If tools are provided, this will run the agent loop (execute tools) until a final answer is reached.
+    /// If no tools are provided, it runs a single-shot completion.
     fn invoke(&self, py: Python, query: String) -> PyResult<AgentResponse> {
-        let client = self.build_client(py);
+        let has_tools = self.tools.as_ref().map(|t| !t.is_empty()).unwrap_or(false);
 
-        let response = RUNTIME.block_on(async {
-            client
-                .invoke_with_response(&query)
-                .await
-                .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
-        })?;
+        if !has_tools {
+            let client = self.build_client(py);
+            let response = RUNTIME.block_on(async {
+                client
+                    .invoke_with_response(&query)
+                    .await
+                    .map_err(|e| PyErr::new::<pyo3::exceptions::PyRuntimeError, _>(e))
+            })?;
 
-        match response {
-            claude::ClaudeResponse::Text(text) => Ok(AgentResponse::Text { text }),
-            claude::ClaudeResponse::ToolCall(tool_call) => Ok(AgentResponse::ToolCall {
-                tool_call: ToolCall {
-                    name: tool_call.name,
-                    args: serde_json::to_string(&tool_call.args)
-                        .unwrap_or_else(|_| "{}".to_string()),
-                },
-            }),
+            return match response {
+                claude::ClaudeResponse::Text(text) => Ok(AgentResponse::Text { text }),
+                claude::ClaudeResponse::ToolCall(tool_call) => Ok(AgentResponse::ToolCall {
+                    tool_call: ToolCall {
+                        name: tool_call.name,
+                        args: serde_json::to_string(&tool_call.args)
+                            .unwrap_or_else(|_| "{}".to_string()),
+                    },
+                }),
+            };
         }
-    }
 
-    /// Run the model with automatic tool execution.
-    /// Like LangChain's AgentExecutor - loops until final text response.
-    fn run(&self, py: Python, query: String) -> PyResult<String> {
+        // Agent loop logic
         let tools_dict = pyo3::types::PyDict::new(py);
-        let mut has_tools = false;
         if let Some(tools) = &self.tools {
             for tool in tools {
                 let tool_obj = tool.bind(py);
                 if let Ok(name) = tool_obj.getattr("__name__") {
                     tools_dict.set_item(name, tool_obj)?;
-                    has_tools = true;
                 }
             }
-        }
-
-        if !has_tools {
-            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
-                "run() requires at least one callable tool. Use invoke() for tool-free calls.",
-            ));
         }
 
         let client = self.build_client(py);
@@ -636,17 +603,15 @@ impl ClaudeModel {
 
             match response {
                 claude::ClaudeResponse::Text(text) => {
-                    return Ok(text);
+                    return Ok(AgentResponse::Text { text });
                 }
                 claude::ClaudeResponse::ToolCall(tool_call) => {
-                    let tool_fn = tools_dict
-                        .get_item(&tool_call.name)?
-                        .ok_or_else(|| {
-                            PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
-                                "Tool '{}' not found",
-                                tool_call.name
-                            ))
-                        })?;
+                    let tool_fn = tools_dict.get_item(&tool_call.name)?.ok_or_else(|| {
+                        PyErr::new::<pyo3::exceptions::PyKeyError, _>(format!(
+                            "Tool '{}' not found",
+                            tool_call.name
+                        ))
+                    })?;
 
                     let kwargs = pythonize::pythonize(py, &tool_call.args)?;
                     let result = if let Ok(dict) = kwargs.cast::<pyo3::types::PyDict>() {
